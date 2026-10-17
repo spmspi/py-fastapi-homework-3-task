@@ -63,7 +63,7 @@ async def register(
         await db.refresh(user)
         stmt = select(UserModel).filter(UserModel.id == user.id)
         db_user = await db.scalar(stmt)
-        if db_user.is_active == False:
+        if db_user.is_active is False:
             activation_token = ActivationTokenModel(user_id=db_user.id)
             db.add(activation_token)
         await db.commit()
@@ -75,7 +75,7 @@ async def register(
     return db_user
 
 
-@router.post("/activate/", response_model= MessageResponseSchema, status_code=status.HTTP_200_OK)
+@router.post("/activate/", response_model=MessageResponseSchema, status_code=status.HTTP_200_OK)
 async def activate_account(
     user: UserActivationRequestSchema, db: AsyncSession = Depends(get_db)
 ):
@@ -85,36 +85,36 @@ async def activate_account(
         .options(selectinload(UserModel.activation_token))
     )
     db_user = await db.scalar(stmt)
+    if db_user is not None:
+        if db_user.is_active is True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User account is already active.",
+            )
 
-    if db_user.is_active == True:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User account is already active.",
+        elif db_user.activation_token is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired activation token.",
+            )
+
+        expires_at = cast(datetime, db_user.activation_token.expires_at).replace(
+            tzinfo=timezone.utc
         )
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired activation token.",
+            )
 
-    elif db_user.activation_token is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired activation token.",
-        )
-
-    expires_at = cast(datetime, db_user.activation_token.expires_at).replace(
-        tzinfo=timezone.utc
-    )
-    if expires_at < datetime.now(timezone.utc):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired activation token.",
-        )
-
-    db_user.is_active = True
-    db_user.activation_token = None
-    await db.commit()
-    await db.refresh(db_user)
+        db_user.is_active = True
+        db_user.activation_token = None
+        await db.commit()
+        await db.refresh(db_user)
     return {"message": "User account activated successfully."}
 
 
-@router.post("/password-reset/request/", response_model=MessageResponseSchema ,status_code=status.HTTP_200_OK)
+@router.post("/password-reset/request/", response_model=MessageResponseSchema, status_code=status.HTTP_200_OK)
 async def request_password_reset_token(
     user: UserBase, db: AsyncSession = Depends(get_db)
 ):
@@ -124,7 +124,7 @@ async def request_password_reset_token(
         .options(selectinload(UserModel.password_reset_token))
     )
     db_user = await db.scalar(stmt)
-    if db_user and db_user.is_active == True:
+    if db_user and db_user.is_active is True:
         if db_user.password_reset_token is not None:
             db.delete(db_user.password_reset_token)
         new_token = PasswordResetTokenModel(user_id=db_user.id)
@@ -136,7 +136,7 @@ async def request_password_reset_token(
 
 
 @router.post(
-    "/reset-password/complete/", response_model=PasswordResetCompleteRequestSchema
+    "/reset-password/complete/", response_model=MessageResponseSchema
 )
 async def reset_password_complete(
     payload_user: PasswordResetRequestSchema, db: AsyncSession = Depends(get_db)
@@ -150,7 +150,7 @@ async def reset_password_complete(
     if (
         db_user is None
         or db_user.password_reset_token is None
-        or db_user.is_active == False
+        or db_user.is_active is False
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -174,14 +174,14 @@ async def reset_password_complete(
         await db.commit()
         await db.refresh(db_user)
         return {"message": "Password reset successfully."}
-    except:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while resetting the password.",
         )
 
 
-@router.post("/login/", response_model=TokenRefreshResponseSchema , status_code=status.HTTP_201_CREATED)
+@router.post("/login/", response_model=TokenRefreshResponseSchema , status_code=status.HTTP_200_OK)
 async def login_user(
     payload_user: UserLoginRequestSchema,
     db: AsyncSession = Depends(get_db),
@@ -196,14 +196,14 @@ async def login_user(
     db_user = await db.scalar(stmt)
     if (
         db_user is None
-        or verify_password(payload_user.password, db_user._hashed_password) == False
+        or verify_password(payload_user.password, db_user._hashed_password) is False
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
         )
 
-    if db_user.is_active == False:
+    if db_user.is_active is False:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is not activated.",
@@ -230,14 +230,14 @@ async def login_user(
             "refresh_token": refresh_token,
             "token_type": "bearer",
         }
-    except:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while processing the request.",
         )
 
 
-@router.post("/refresh/")
+@router.post("/api/v1/accounts/refresh/")
 async def refresh_user_token(
     refresh_token: TokenRefreshRequestSchema,
     db: AsyncSession = Depends(get_db),
