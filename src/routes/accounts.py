@@ -181,7 +181,7 @@ async def reset_password_complete(
         )
 
 
-@router.post("/login/", response_model=TokenRefreshResponseSchema , status_code=status.HTTP_200_OK)
+@router.post("/login/", response_model=TokenRefreshResponseSchema , status_code=status.HTTP_201_CREATED)
 async def login_user(
     payload_user: UserLoginRequestSchema,
     db: AsyncSession = Depends(get_db),
@@ -237,7 +237,7 @@ async def login_user(
         )
 
 
-@router.post("/api/v1/accounts/refresh/")
+@router.post("/refresh/")
 async def refresh_user_token(
     refresh_token: TokenRefreshRequestSchema,
     db: AsyncSession = Depends(get_db),
