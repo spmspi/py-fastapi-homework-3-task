@@ -67,7 +67,7 @@ async def register(
             activation_token = ActivationTokenModel(user_id=db_user.id)
             db.add(activation_token)
         await db.commit()
-    except:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred during user creation.",
